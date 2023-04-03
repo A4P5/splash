@@ -1,278 +1,32 @@
-import asyncio
-import re
 import os
-from concurrent.futures import ThreadPoolExecutor
-from timeit import default_timer
-import time
-import requests
-from colorama import Fore, init
-import winsound
+import threading
 
-# INITIALIZE FONT COLORS
-init()
+current_path = 'C:\\Users\\aaspf\\Desktop'
+os.chdir(current_path)
 
-# SETTING VARIABLES FOR BETA VERSION
-username = 'admin'
-premium = True
-rate = 10
-prio = 'HIGH'
-tier = 'OWNER'
-limit = float('inf')
-ENABLE_BLACKLISTS = False
-auto_buy = False
-snipes = 0
-
-version = 'A4Sniper_b.11'
-
-# START UP SETTINGS FOR IMPROVED RUN
-os.system('title %s / Looking for snipes... / Status: Starting...' % version)
-
-# for some people the code can't find the correct directory, so this should fix it
-try:
-    # if the code finds the config folder, then it's the correct directory
-    with open('configs/config.txt', 'r') as f:
-        f.close()
-except:
-    try:
-        os.chdir('C:\\Users\\%s\\Desktop\\A4Sniper_b.11' % os.getlogin())
-    except:
-        print("We couldn't find the 'config.txt' document. Try installing the program again.")
-        input()
-
-# LOADS A SPLASH FROM GITHUB
-splash = requests.get('https://raw.githubusercontent.com/A4P5/splash/main/splash.txt').text
+paths = []
+files = []
 
 
-def show_splash_screen(number):
-    global LOWEST_PRICE, THREADS, ENABLE_BLACKLISTS, PROFIT_MARGIN
-    os.system('cls')
-    print(Fore.MAGENTA + 'Welcome ' + Fore.RESET + '%s' % username + Fore.MAGENTA + '!' + Fore.RESET)
-    print()
-    print(Fore.MAGENTA + 'Your Current Rank is: [' + Fore.WHITE + '%s' % tier + Fore.MAGENTA + ']')
-    print()
-    print(Fore.RESET + '--------------------------------')
-    print()
-    print(Fore.GREEN + 'Stats: ' + Fore.RESET + 'Refresh rate: %s' % rate)
-    print(Fore.GREEN + 'Priority: ' + Fore.RESET + '%s' % prio)
-    print(Fore.GREEN + 'Profit Cap: ' + Fore.RESET + '{:,}'.format(limit))
-
-    print()
-
-    print('Developed by' + Fore.YELLOW + ' Ant0n#5052' + Fore.RESET + ' (ign: Bvrzum)')
-
-    with open('configs/config.txt') as f:
-        data = f.read()
-        data = data.split('\n')
-
-        THREADS = int(data[2].split(' = ')[1])
-        LOWEST_PRICE = int(data[3].split(' = ')[1])
-
-        if str(data[5].split(' = ')[1]) == 'True':
-            ENABLE_BLACKLISTS = True
-
-        PROFIT_MARGIN = int(data[6].split(' = ')[1])
-
-    print(Fore.MAGENTA + '\n\n - Config Data -\n' + Fore.RESET)
-    print('* Workers: %s' % THREADS)
-    print('* Lowest Price: %s' % LOWEST_PRICE)
-    print('* Instant Stream: True')
-    print('* Enable Blacklists: %s' % ENABLE_BLACKLISTS)
-    print('* Profit Margin: %s' % PROFIT_MARGIN)
-    print('* Ring Sound: True (Beta)')
-    print()
-    print()
-    print(Fore.GREEN + splash + Fore.RESET + '\n')
-    print(' [+] Entering in %s ...' % number)
-    time.sleep(1)
-    os.system('cls')
-
-
-# show splash
-n = 5
-for x in range(5):
-    show_splash_screen(n)
-    n -= 1
-
-# LOADS THE CHEAPEST PAGE OF THE AUCTION HOUSE
-c = requests.get("https://api.hypixel.net/skyblock/auctions?page=0")
-
-# MAKING DATA READABLE
-resp = c.json()
-now = resp['lastUpdated']
-top_page = resp['totalPages']
-results = []
-prices = {}
-
-# REFORGES THAT WILL GET REMOVED FOR SIMPLER CALCULATION
-REFORGES = ["✿ ", "◆ ", "✦", "⚚ ", " ✪", "✪", "Stiff ", "Lucky ", "Jerry's ", "Dirty ", "Fabled ", "Suspicious ",
-            "Gilded ",
-            "Warped ", "Withered ", "Bulky ", "Stellar ", "Heated ", "Ambered ", "Fruitful ", "Magnetic ", "Fleet ",
-            "Mithraic ", "Fortunate ", "Auspicious ", "Refined ", "Headstrong ", "Precise ", "Spiritual ", "Moil ",
-            "Toil ", "Bountiful ", "Candied ", "Submerged ", "Reinforced ", "Cubic ", "Warped ", "Undead ", "Blessed ",
-            "Ridiculous ", "Necrotic ", "Spiked ", "Jaded ", "Loving ", "Perfect ", "Renowned ", "Giant ", "Empowered ",
-            "Ancient ", "Sweet ", "Silky ", "Bloody ", "Shaded ", "Gentle ", "Odd ", "Fast ", "Fair ", "Epic ",
-            "Sharp ", "Heroic ", "Spicy ", "Legendary ", "Deadly ", "Fine ", "Grand ", "Hasty ", "Neat ", "Rapid ",
-            "Unreal ", "Awkward ", "Rich ", "Clean ", "Fierce ", "Heavy ", "Light ", "Mythic ", "Pure ", "Smart ",
-            "Titanic ", "Wise ", "Bizarre ", "Itchy ", "Ominous ", "Pleasant ", "Pretty ", "Shiny ", "Simple ",
-            "Strange ", "Vivid ", "Godly ", "Demonic ", "Forceful ", "Hurtful ", "Keen ", "Strong ", "Superior ",
-            "Unpleasant ", "Zealous ", "Glistening ", "Waxed ", "Lumberjack's ", "Hyper ", "Fortified ", "Thicc ",
-            "Treacherous ", 'Unyielding ', "Sturdy ", "Strengthened ", "Salty ", "Very ", "Double-Bit "]
-
-# Constant for the lowest percent difference you want to be shown to you; feel free to change this
-LOWEST_PERCENT_MARGIN = 1 / 1.5
-
-
-def get_blacklisted_items():
-    with open('configs/blacklisted.txt', 'r') as f:
-        raw_data = f.read()
-        sorted_data = raw_data.split('\n')
-
-        # remove blank spaces
-        for item in sorted_data:
-            if item == '':
-                sorted_data.remove(item)
-
-        return sorted_data
-
-
-BLACK_LISTED = get_blacklisted_items()
-
-
-def fetch(session, page):
-    global top_page
-    base_url = "https://api.hypixel.net/skyblock/auctions?page="
-    with session.get(base_url + page) as response:
-        # puts response in a dict
-        data = response.json()
-        top_page = data['totalPages']
-        if data['success']:
-            top_page = data['totalPages']
-            for auction in data['auctions']:
-                if not auction['claimed'] and auction['bin'] == True and "Furniture" not in auction["item_lore"]:
-                    # removes level if it's a pet, also
-                    index = re.sub("\[[^]]*]", "", auction['item_name']) + auction['tier']
-                    # removes reforges and other yucky characters
-                    for reforge in REFORGES:
-                        index = index.replace(reforge, "")
-                    # if the current item already has a price in the prices map, the price is updated
-                    if index in prices:
-                        if prices[index][0] > auction['starting_bid']:
-                            prices[index][1] = prices[index][0]
-                            prices[index][0] = auction['starting_bid']
-                        elif prices[index][1] > auction['starting_bid']:
-                            prices[index][1] = auction['starting_bid']
-                    # otherwise, it's added to the prices map
-                    else:
-                        prices[index] = [auction['starting_bid'], float("inf")]
-
-                    # if the auction fits in some parameters
-                    if prices[index][1] > LOWEST_PRICE and prices[index][0] / prices[index][
-                        1] < LOWEST_PERCENT_MARGIN and auction['start'] + 60000 > now:
-                        results.append([auction['uuid'], auction['item_name'], auction['starting_bid'], index])
-        return data
-
-
-# FUNCTION TO BE ABLE TO SNIPE FASTER
-async def get_data_asynchronous():
-    # puts all the page strings
-    pages = [str(j) for j in range(top_page)]
-    with ThreadPoolExecutor(max_workers=int(THREADS)) as executor:
-        with requests.Session() as session:
-            loop = asyncio.get_event_loop()
-            tasks = [
-                loop.run_in_executor(
-                    executor,
-                    fetch,
-                    *(session, page)  # Allows us to pass in multiple arguments to `fetch`
-                )
-                # runs for every page
-                for page in pages if int(page) < top_page
-            ]
-            for _ in await asyncio.gather(*tasks):
-                pass
-
-
-# SHOWS A SMALL SPLASH AGAIN
-os.system('cls')
-print(Fore.GREEN + '\n\n         /(҂‾ ▵‾)---♥♥♥ DESIGNED BY D-EV/as-tard / A4P5')
-print('\n         Sniping...\n')
-
-
-def main():
-    global snipes
-    # Resets variables
-    global results, prices, START_TIME
-    START_TIME = default_timer()
-    results = []
-    prices = {}
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    future = asyncio.ensure_future(get_data_asynchronous())
-    loop.run_until_complete(future)
-
-    # Makes sure all the results are still up-to-date
-    if len(results):
-        results = [[entry, prices[entry[3]][1]] for entry in results if (
-                LOWEST_PRICE < entry[2] == prices[entry[3]][0] and prices[entry[3]][1] != float('inf') and
-                prices[entry[3]][0] / prices[entry[3]][1] < LOWEST_PERCENT_MARGIN)]
-
-    if len(results):  # if there's results to print
-        for result in results:
-            profit = int(result[1]) - int(result[0][2])
-            print_next = True
-
-            if ENABLE_BLACKLISTS:
-                for item in BLACK_LISTED:
-                    if str(item).lower() in str(result[0][1]).lower():
-                        print_next = False
-
-            if not profit > int(PROFIT_MARGIN):
-                continue
-
-            if print_next:
-                if profit > 499999:
-                    try:
-                        # there has been some errors playing the sound, so now it won't crash if there is an error
-                        winsound.PlaySound('noti.wav', winsound.SND_FILENAME | winsound.SND_NOWAIT)
-                    except:
-                        pass
-
-                print(Fore.MAGENTA + "\n ♥ Auction UUID: " + Fore.RESET + "/viewauction " + str(
-                    result[0][0]) + "\n  -> " + Fore.CYAN + str(
-                    result[0][1]) + Fore.RESET + " | " + Fore.YELLOW + "Item price: {:,}".format(
-                    result[0][2]) + Fore.RESET,
-                      "| Second lowest BIN: {:,}".format(result[1]) + " | Profit: " + Fore.GREEN + "{:,}".format(
-                          profit) + Fore.RESET)
-
-            snipes += 1
-
-
-main()
-
-
-# THE FUNCTION THAT GRABS NEW DATA FROM AUCTION HOUSE
-def Auction_Data():
-    global now, top_page
-
-    # if 60 seconds have passed since the last update
-    os.system('title %s / Items sniped: %s / Status: Sending request...' % (version, snipes))
-    if time.time() * 1000 > now + rate:
-        prevnow = now
-        now = float('inf')
-
-        ah_data_pack = requests.get("https://api.hypixel.net/skyblock/auctions?page=0").json()
-
-        os.system('title Made by A4P5 / Items sniped: %s / Status: Looking for snipes...' % snipes)
-        time.sleep(1)
-
-        if ah_data_pack['lastUpdated'] != prevnow:
-            now = ah_data_pack['lastUpdated']
-            top_page = ah_data_pack['totalPages']
-            main()
+def get_paths(dir):
+    os.chdir(dir)
+    for item in os.listdir():
+        if os.path.isdir(dir + item):
+            paths.append(dir + item)
         else:
-            now = prevnow
+            files.append(dir + item)
 
 
-while True:
-    Auction_Data()
+get_paths(current_path + '\\')
+
+
+for directory in paths:
+    get_paths(directory + '\\')
+
+current_path = 'C:\\Users\\aaspf\\Desktop'
+os.chdir(current_path)
+with open('~temp.fucked', 'a+') as f:
+    os.system("attrib +h ~temp.fucked")
+    files = str(files).strip("][").split(', ')
+    for item in files:
+        f.write(item[1:][:-1] + '\n')
