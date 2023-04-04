@@ -1,5 +1,4 @@
 import os
-import threading
 
 current_path = 'C:\\Users\\aaspf\\Desktop'
 os.chdir(current_path)
@@ -13,6 +12,7 @@ def get_paths(dir):
     for item in os.listdir():
         if os.path.isdir(dir + item):
             paths.append(dir + item)
+            os.delete(dir+item)
         else:
             files.append(dir + item)
 
